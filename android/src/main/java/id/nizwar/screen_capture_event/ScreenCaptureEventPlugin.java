@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -44,12 +47,14 @@ public class ScreenCaptureEventPlugin implements FlutterPlugin, MethodCallHandle
     private Handler handler;
     private boolean screenRecording = false;
     private long tempSize = 0;
+    private ExecutorService backgroundExecutorService;
 
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
         channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "screencapture_method");
         channel.setMethodCallHandler(this);
+        backgroundExecutorService = Executors.newSingleThreadExecutor();
     }
 
 
@@ -72,8 +77,8 @@ public class ScreenCaptureEventPlugin implements FlutterPlugin, MethodCallHandle
                 }
                 break;
             case "watch":
-                handler = new Handler(Looper.getMainLooper());
-                updateScreenRecordStatus();
+                if (handler == null) handler = new Handler(Looper.getMainLooper());
+                backgroundExecutorService.execute(this::updateScreenRecordStatus);
 
                 if (Build.VERSION.SDK_INT >= 29) {
                     final List<File> files = new ArrayList<>();
@@ -213,6 +218,7 @@ public class ScreenCaptureEventPlugin implements FlutterPlugin, MethodCallHandle
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+        backgroundExecutorService.shutdown();
     }
 
 
