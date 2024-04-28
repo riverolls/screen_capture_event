@@ -24,7 +24,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -171,39 +170,54 @@ public class ScreenCaptureEventPlugin implements FlutterPlugin, MethodCallHandle
                 String mime = getMimeType(newFile.getPath());
                 if (mime != null) {
                     if (mime.contains("video") && !watchModifier.containsKey(newFile.getPath())) {
-                        watchModifier.put(newFile.getPath(), new FileObserver(newFile) {
-                            @Override
-                            public void onEvent(int event, @Nullable String path) {
-                                long curSize = newFile.length();
-                                if (curSize > tempSize) {
-                                    if (timeout != null) {
-                                        try {
-                                            timeout.cancel();
-                                            timeout = null;
-                                        } catch (Exception ignored) {
-                                        }
-                                    }
-                                    setScreenRecordStatus(event == FileObserver.MODIFY);
-                                    tempSize = newFile.length();
+                        FileObserver observer;
+                        if (Build.VERSION.SDK_INT >= 29) {
+                            observer = new FileObserver(newFile) {
+                                @Override
+                                public void onEvent(int event, @Nullable String path) {
+                                    ScreenCaptureEventPlugin.this.onEvent(event, newFile);
                                 }
-                                if (timeout == null) {
-                                    timeout = new Timer();
-                                    timeout.schedule(new TimerTask() {
-                                        @Override
-                                        public void run() {
-                                            if (watchModifier.containsKey(newFile.getPath())) {
-                                                setScreenRecordStatus(curSize != tempSize);
-                                            }
-                                        }
-                                    }, 1500);
+                            };
+                        } else {
+                            observer = new FileObserver(newFile.getPath()) {
+                                @Override
+                                public void onEvent(int event, @Nullable String path) {
+                                    ScreenCaptureEventPlugin.this.onEvent(event, newFile);
                                 }
-                            }
-                        });
+                            };
+                        }
+                        watchModifier.put(newFile.getPath(), observer);
                         FileObserver watch = watchModifier.get(newFile.getPath());
                         if (watch != null) watch.startWatching();
                     }
                 }
             }
+        }
+    }
+
+    private void onEvent(int event, File newFile) {
+        long curSize = newFile.length();
+        if (curSize > tempSize) {
+            if (timeout != null) {
+                try {
+                    timeout.cancel();
+                    timeout = null;
+                } catch (Exception ignored) {
+                }
+            }
+            setScreenRecordStatus(event == FileObserver.MODIFY);
+            tempSize = newFile.length();
+        }
+        if (timeout == null) {
+            timeout = new Timer();
+            timeout.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if (watchModifier.containsKey(newFile.getPath())) {
+                        setScreenRecordStatus(curSize != tempSize);
+                    }
+                }
+            }, 1500);
         }
     }
 
@@ -272,8 +286,7 @@ public class ScreenCaptureEventPlugin implements FlutterPlugin, MethodCallHandle
     }
 
     public enum Path {
-        DCIM(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + File.separator + "Screenshots" + File.separator),
-        PICTURES(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator + "Screenshots" + File.separator);
+        DCIM(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + File.separator + "Screenshots" + File.separator), PICTURES(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator + "Screenshots" + File.separator);
 
         final private String path;
 
