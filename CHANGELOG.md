@@ -1,3 +1,7 @@
+## 1.1.1+2
+
+* Add namespace to build.gradle
+
 ## 1.1.1
 * Fix Exception when addScreenShotListener (Android) Thanks to @juarezfranco
 ## 1.1.0
